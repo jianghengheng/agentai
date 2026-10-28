@@ -8,6 +8,7 @@ import request from 'supertest';
 import type { App } from 'supertest/types.js';
 import { AppModule } from '../src/app.module.js';
 import { PrismaService } from '../src/prisma/prisma.service.js';
+import { RagService } from '../src/rag/rag.service.js';
 import { UserService } from '../src/user/user.service.js';
 
 describe('UserController (e2e)', () => {
@@ -31,6 +32,8 @@ describe('UserController (e2e)', () => {
       imports: [AppModule],
     })
       .overrideProvider(PrismaService)
+      .useValue({})
+      .overrideProvider(RagService)
       .useValue({})
       .overrideProvider(UserService)
       .useValue(users)

@@ -3,6 +3,7 @@ import { Test } from '@nestjs/testing';
 import { AppModule } from './app.module.js';
 import { createOpenApiDocument } from './openapi.js';
 import { PrismaService } from './prisma/prisma.service.js';
+import { RagService } from './rag/rag.service.js';
 
 describe('OpenAPI document', () => {
   let app: INestApplication;
@@ -10,6 +11,8 @@ describe('OpenAPI document', () => {
   beforeAll(async () => {
     const fixture = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(PrismaService)
+      .useValue({})
+      .overrideProvider(RagService)
       .useValue({})
       .compile();
     app = fixture.createNestApplication();

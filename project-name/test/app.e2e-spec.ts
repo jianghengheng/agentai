@@ -4,6 +4,7 @@ import request from 'supertest';
 import { App } from 'supertest/types.js';
 import { AppModule } from './../src/app.module.js';
 import { PrismaService } from './../src/prisma/prisma.service.js';
+import { RagService } from './../src/rag/rag.service.js';
 import { setupOpenApi } from './../src/openapi.js';
 
 describe('AppController (e2e)', () => {
@@ -14,6 +15,8 @@ describe('AppController (e2e)', () => {
       imports: [AppModule],
     })
       .overrideProvider(PrismaService)
+      .useValue({})
+      .overrideProvider(RagService)
       .useValue({})
       .compile();
 

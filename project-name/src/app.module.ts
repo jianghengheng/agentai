@@ -8,11 +8,14 @@ import { PrismaModule } from './prisma/prisma.module.js';
 import { ApiExceptionFilter } from './common/api-exception.filter.js';
 import { ResponseInterceptor } from './common/response.interceptor.js';
 import { EmbedModule } from './embed/embed.module.js';
+import { RagModule } from './rag/rag.module.js';
+import { AiModule } from './ai/ai.module.js';
 
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
 
 @Module({
   imports: [
+    AiModule,
     PrismaModule,
     UserModule,
     // Distributed tracing, auto-correlated logs, request/job metrics, error
@@ -24,6 +27,7 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
       serviceId: 'project-name',
     }),
     EmbedModule,
+    RagModule,
   ],
   controllers: [AppController],
   providers: [
