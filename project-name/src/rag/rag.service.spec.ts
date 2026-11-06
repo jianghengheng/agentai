@@ -490,3 +490,146 @@ describe('RagService search embeddings', () => {
     },
   );
 });
+
+describe('RagService agent', () => {
+  it('returns the input message when the model answers without using a tool', async () => {
+    const service = Object.create(RagService.prototype) as RagService;
+    const response = new AIMessage('已收到');
+    (service as any).checkUserTool = { name: 'checkUser', description: 'x', invoke: vi.fn() };
+    (service as any).createUserTool = { name: 'createUser', description: 'y', invoke: vi.fn() };
+    (service as any).ai = {
+      llm: {
+        bindTools: vi.fn(() => ({
+          invoke: vi.fn().mockResolvedValue(response),
+        })),
+      },
+    };
+
+    await expect(service.runagent('张三在职吗？')).resolves.toMatchObject({
+      message: '张三在职吗？',
+      totalRounds: 1,
+      answer: '已收到',
+    });
+  });
+
+  it('executes the registered user check tool when the model requests it', async () => {
+    const service = Object.create(RagService.prototype) as RagService;
+    const firstResponse = new AIMessage({
+      content: '',
+      tool_calls: [{ name: 'checkUser', args: { userName: '张三' }, id: 'call-1' }],
+    });
+    const finalResponse = new AIMessage('张三在职');
+    const invoke = vi.fn()
+      .mockResolvedValueOnce(firstResponse)
+      .mockResolvedValueOnce(finalResponse);
+    const toolInvoke = vi.fn().mockResolvedValue('张三在职');
+    (service as any).checkUserTool = {
+      name: 'checkUser',
+      description: 'x',
+      invoke: toolInvoke,
+    };
+    (service as any).createUserTool = { name: 'createUser', description: 'y', invoke: vi.fn() };
+    (service as any).ai = {
+      llm: {
+        bindTools: vi.fn(() => ({ invoke })),
+      },
+    };
+
+    await expect(service.runagent('张三在职吗？')).resolves.toMatchObject({
+      answer: '张三在职',
+      totalRounds: 2,
+      steps: expect.arrayContaining([expect.stringContaining('✅ [工具结果] 张三在职')]),
+    });
+    expect(toolInvoke).toHaveBeenCalledWith({ userName: '张三' });
+  });
+
+  it('does not pass stop sequences to the model, which truncate tool_calls', async () => {
+    const service = Object.create(RagService.prototype) as RagService;
+    const invoke = vi.fn().mockResolvedValue(new AIMessage('已收到'));
+    const bindTools = vi.fn(() => ({ invoke }));
+    (service as any).checkUserTool = { name: 'checkUser', description: 'x', invoke: vi.fn() };
+    (service as any).createUserTool = { name: 'createUser', description: 'y', invoke: vi.fn() };
+    (service as any).ai = { llm: { bindTools } };
+
+    await service.runagent('张三在职吗？');
+
+    // 只传 messages：曾经传的 { stop: ['\n\n'] } 会把 tool_calls 的 JSON 截断
+    expect(invoke.mock.calls[0]).toHaveLength(1);
+    expect(bindTools).toHaveBeenCalledWith(
+      [expect.objectContaining({ name: 'checkUser' }), expect.objectContaining({ name: 'createUser' })],
+      { tool_choice: 'auto' },
+    );
+  });
+
+  it('asks for confirmation instead of running a write tool immediately', async () => {
+    const service = Object.create(RagService.prototype) as RagService;
+    const firstResponse = new AIMessage({
+      content: '',
+      tool_calls: [
+        { name: 'createUser', args: { userName: '李四', email: 'lisi@example.com' }, id: 'call-2' },
+      ],
+    });
+    const invoke = vi.fn().mockResolvedValueOnce(firstResponse);
+    const createInvoke = vi
+      .fn()
+      .mockResolvedValue('User "李四" has been created successfully with ID: 1.');
+    (service as any).checkUserTool = { name: 'checkUser', description: 'x', invoke: vi.fn() };
+    (service as any).createUserTool = { name: 'createUser', description: 'y', invoke: createInvoke };
+    (service as any).ai = { llm: { bindTools: vi.fn(() => ({ invoke })) } };
+
+    const result = await service.runagent('帮我创建一个新员工李四', 'session-create');
+
+    expect(createInvoke).not.toHaveBeenCalled();
+    expect(result.answer).toContain('确认');
+    expect(result.answer).toContain('李四');
+    expect(result.steps.join('\n')).toContain('等待用户确认');
+  });
+
+  it('executes the pending write tool after the user confirms', async () => {
+    const service = Object.create(RagService.prototype) as RagService;
+    const firstResponse = new AIMessage({
+      content: '',
+      tool_calls: [
+        { name: 'createUser', args: { userName: '李四', email: 'lisi@example.com' }, id: 'call-3' },
+      ],
+    });
+    const invoke = vi
+      .fn()
+      .mockResolvedValueOnce(firstResponse)
+      .mockResolvedValueOnce(new AIMessage('已创建李四'));
+    const createInvoke = vi
+      .fn()
+      .mockResolvedValue('User "李四" has been created successfully with ID: 1.');
+    (service as any).checkUserTool = { name: 'checkUser', description: 'x', invoke: vi.fn() };
+    (service as any).createUserTool = { name: 'createUser', description: 'y', invoke: createInvoke };
+    (service as any).ai = { llm: { bindTools: vi.fn(() => ({ invoke })) } };
+
+    await service.runagent('帮我创建一个新员工李四', 'session-confirm');
+    const confirmed = await service.runagent('确认', 'session-confirm');
+
+    expect(createInvoke).toHaveBeenCalledWith({ userName: '李四', email: 'lisi@example.com' });
+    expect(confirmed.answer).toBe('已创建李四');
+    expect(confirmed.steps.join('\n')).toContain('✅ [用户已确认]');
+  });
+
+  it('drops the pending write tool when the user cancels', async () => {
+    const service = Object.create(RagService.prototype) as RagService;
+    const firstResponse = new AIMessage({
+      content: '',
+      tool_calls: [
+        { name: 'createUser', args: { userName: '李四', email: 'lisi@example.com' }, id: 'call-4' },
+      ],
+    });
+    const invoke = vi.fn().mockResolvedValueOnce(firstResponse);
+    const createInvoke = vi.fn().mockResolvedValue('created');
+    (service as any).checkUserTool = { name: 'checkUser', description: 'x', invoke: vi.fn() };
+    (service as any).createUserTool = { name: 'createUser', description: 'y', invoke: createInvoke };
+    (service as any).ai = { llm: { bindTools: vi.fn(() => ({ invoke })) } };
+
+    await service.runagent('帮我创建一个新员工李四', 'session-cancel');
+    const cancelled = await service.runagent('取消', 'session-cancel');
+
+    expect(createInvoke).not.toHaveBeenCalled();
+    expect(cancelled.answer).toContain('已取消');
+  });
+});
