@@ -10,6 +10,7 @@ import { ResponseInterceptor } from './common/response.interceptor.js';
 import { EmbedModule } from './embed/embed.module.js';
 import { RagModule } from './rag/rag.module.js';
 import { AiModule } from './ai/ai.module.js';
+import { LanggraphModule } from './langgraph/langgraph.module.js';
 
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
 
@@ -28,6 +29,7 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
     }),
     EmbedModule,
     RagModule,
+    LanggraphModule,
   ],
   controllers: [AppController],
   providers: [

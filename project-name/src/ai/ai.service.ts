@@ -64,5 +64,6 @@ export class AiService {
       useResponsesApi: false,
       timeout: 60000,
     });
+
   }
 }
