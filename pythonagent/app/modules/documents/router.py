@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request # pyright: ignore[reportMissingImports]
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.schemas import ApiResponse, success
